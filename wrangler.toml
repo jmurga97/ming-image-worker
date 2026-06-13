@@ -24,18 +24,18 @@ bucket_name = "roncalphoto-media"
 
 [[queues.producers]]
 binding = "IMAGE_PROCESSING_QUEUE"
-queue = "ming-image-processing"
+queue = "ming-image-processing-production"
 
 [[queues.consumers]]
-queue = "ming-image-processing"
+queue = "ming-image-processing-production"
 max_batch_size = 1
 max_batch_timeout = 5
 max_retries = 3
 retry_delay = 30
-dead_letter_queue = "ming-image-processing-dlq"
+dead_letter_queue = "ming-image-processing-production-dlq"
 
 [[queues.consumers]]
-queue = "ming-image-processing-dlq"
+queue = "ming-image-processing-production-dlq"
 max_batch_size = 1
 max_batch_timeout = 5
 
@@ -43,5 +43,5 @@ max_batch_timeout = 5
 R2_ACCOUNT_ID = "fee0d037c4a95bd94c997ee2a8b520be"
 RONCALPHOTO_ORIGINALS_BUCKET_NAME = "roncalphoto-originals"
 RONCALPHOTO_MEDIA_BUCKET_NAME = "roncalphoto-media"
-PROCESSING_QUEUE_NAME = "ming-image-processing"
-PROCESSING_DLQ_NAME = "ming-image-processing-dlq"
+PROCESSING_QUEUE_NAME = "ming-image-processing-production"
+PROCESSING_DLQ_NAME = "ming-image-processing-production-dlq"
