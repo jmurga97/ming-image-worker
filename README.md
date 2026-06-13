@@ -88,7 +88,7 @@ sequenceDiagram
 
 ## Technology
 
-- Bun for dependency management, scripts, and tests.
+- Bun for package management and project scripts.
 - Hono and `@hono/zod-openapi` for the private HTTP contract.
 - Zod for request, runtime, and product-policy validation.
 - D1 and Drizzle schema definitions for job persistence.
@@ -113,7 +113,6 @@ src/
 │   └── uploads/            # Private HTTP contract and job repository
 ├── shared/                 # Stable errors and HTTP/OpenAPI helpers
 └── index.ts                # Fetch and Queue handlers
-tests/                      # Unit, route, and in-memory integration tests
 ```
 
 ## Private HTTP contract
@@ -265,8 +264,10 @@ Successful processing returns:
 POST /v1/uploads/{uploadId}/retry?productId=<product-id>
 ```
 
-Retry is allowed only when the job is `failed` and the original still exists. The worker changes
-the job to `queued` and sends an internal retry message to `IMAGE_PROCESSING_QUEUE`.
+Retry is allowed only when the job is `failed` and the original still exists. The endpoint first
+sends an internal retry message to `IMAGE_PROCESSING_QUEUE` without changing job state. The
+response can therefore still report `failed` until the Queue consumes that message. The explicit
+retry message then moves the job through `queued` into `processing`.
 
 ### Health and OpenAPI
 
@@ -298,8 +299,38 @@ main: WebP, width 1920, scale-down, quality 85
 thumbnail: WebP, width 480, scale-down, quality 80
 ```
 
-When changing a preset's transform behavior, increment its version. Versioned deterministic output
-keys prevent a new transform definition from silently reusing an old object path.
+When changing a preset's transform behavior, increment its version and keep the old definition in
+the preset's optional `previousVersions` map while jobs can still reference it:
+
+```json
+{
+  "version": 2,
+  "variants": {
+    "main": {
+      "format": "image/webp",
+      "width": 2048,
+      "fit": "scale-down",
+      "quality": 85
+    }
+  },
+  "previousVersions": {
+    "1": {
+      "variants": {
+        "main": {
+          "format": "image/webp",
+          "width": 1920,
+          "fit": "scale-down",
+          "quality": 85
+        }
+      }
+    }
+  }
+}
+```
+
+New uploads use the current version. Existing uploads resolve the exact version stored in D1, so
+queued jobs continue to process after a policy upgrade. Versioned deterministic output keys
+prevent a new transform definition from silently reusing an old object path.
 
 ## Storage registry
 
@@ -312,9 +343,8 @@ To add a product:
 1. Add originals and output R2 bindings to staging and production Wrangler environments.
 2. Add the binding mapping to the TypeScript storage registry.
 3. Add the product and its allowed presets to `image-policy.json`.
-4. Add storage-policy validation tests.
-5. Configure R2 CORS and event notification for the originals bucket.
-6. Regenerate Worker types with `bun run cf-typegen`.
+4. Configure R2 CORS and event notification for the originals bucket.
+5. Regenerate Worker types with `bun run cf-typegen`.
 
 ## Processing and delivery guarantees
 
@@ -326,19 +356,22 @@ Queue delivery is at least once. Processing is idempotent through:
 - unique original bucket/key and product/idempotency constraints;
 - conditional D1 processing claims;
 - five-minute processing leases;
+- attempt-based fencing for completion and failure writes;
 - deterministic versioned variant keys;
 - atomic D1 batch replacement of variants and final job status;
-- no-op handling for already succeeded jobs.
+- no-op handling for already succeeded jobs and stale workers;
+- ignoring duplicate R2 deliveries for permanently failed jobs.
 
 Permanent errors such as unsupported formats, invalid image data, or excessive actual size are
-recorded as `failed` and acknowledged. Transient R2, Images, storage, or unexpected processing
-errors return the Queue message for retry with bounded delays. Wrangler configures three retries;
-exhausted messages move to the DLQ, whose consumer records
-`PROCESSING_RETRIES_EXHAUSTED`.
+recorded as `failed` and acknowledged. Only an explicit retry request can reactivate them.
+Transient R2, Images, storage, or unexpected processing errors return the Queue message for retry
+with delays of 30, 120, and then 300 seconds. Wrangler configures three retries; exhausted
+messages move to the DLQ, whose consumer records `PROCESSING_RETRIES_EXHAUSTED` only while the job
+is still queued.
 
-If output variants succeed but optional original deletion fails, the upload remains `succeeded`
-with `originalRetentionStatus = "delete_failed"`. Cleanup can be repaired operationally without
-invalidating the product asset.
+Original retention runs only after fenced processing completion and never changes a successful job
+back to `queued` or `failed`. Failed cleanup is recorded as `delete_failed` when that status update
+succeeds; a retention persistence failure may leave the previous retention status in place.
 
 ## D1 data
 
@@ -370,7 +403,7 @@ Runtime variables:
 | `R2_ACCOUNT_ID`                     | R2 S3-compatible endpoint                |
 | `RONCALPHOTO_ORIGINALS_BUCKET_NAME` | Name used for signing and event matching |
 | `RONCALPHOTO_MEDIA_BUCKET_NAME`     | Name returned in manifests               |
-| `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` | Optional-public output URL base          |
+| `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` | Public output URL base                   |
 | `PROCESSING_QUEUE_NAME`             | Main Queue dispatch name                 |
 | `PROCESSING_DLQ_NAME`               | DLQ dispatch name                        |
 
@@ -401,6 +434,8 @@ wrangler queues create ming-image-processing-dlq-production
 
 wrangler r2 bucket create roncalphoto-originals-staging
 wrangler r2 bucket create roncalphoto-media-staging
+wrangler r2 bucket create roncalphoto-originals
+wrangler r2 bucket create roncalphoto-media
 ```
 
 Create R2 event notifications:
@@ -505,18 +540,9 @@ consumer. Do not point local development at production resources.
 
 ## Logging
 
-Structured processing logs contain:
-
-- product;
-- upload ID;
-- preset;
-- attempt;
-- transition or outcome;
-- duration;
-- stable error code.
-
-Logs never include signed URLs, credentials, image bytes, filenames, or operational metadata
-values.
+There is no request or per-event logging. Unexpected HTTP and Queue handler failures emit only a
+fixed `console.error` message without request data, signed URLs, credentials, image bytes,
+filenames, or operational metadata.
 
 ## Stable error codes
 
@@ -556,11 +582,14 @@ bun run lint:fix
 bun run format
 ```
 
+There is currently no automated test suite. `bun test` is retained as the project test command for
+future coverage and currently exits with "No tests found".
+
 ## Verification checklist
 
 Before production deployment:
 
-1. `bun test`, `bun run check`, `bun run lint`, and `bun run build` pass.
+1. `bun run check`, `bun run lint`, and `bun run build` pass.
 2. Staging original upload succeeds through a product backend.
 3. R2 emits an event and both variants appear with immutable cache headers.
 4. Status polling returns detected source metadata and complete named variants.
@@ -575,8 +604,8 @@ Before production deployment:
 - `Storage profile ... is not configured`: add its TypeScript registry entry and bindings.
 - Signed PUT returns a browser CORS error: configure CORS on the originals R2 bucket.
 - Upload remains `awaiting_upload`: verify the R2 event notification targets the configured Queue.
-- Upload returns to `queued`: inspect structured logs for the retryable error code.
+- Upload returns to `queued`: inspect the status response's retryable error and provider health.
 - Upload reaches `PROCESSING_RETRIES_EXHAUSTED`: inspect the DLQ and provider availability.
-- Manifest URLs are null or incorrect: configure the output profile's public base URL.
+- Manifest URLs are incorrect: configure the output profile's public base URL.
 - Local changes are not processing: remote Queue events are consumed by the deployed Worker, so
   deploy staging consumer changes before exercising remote uploads.
