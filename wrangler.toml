@@ -1,0 +1,144 @@
+name = "ming-image-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+compatibility_flags = ["nodejs_compat"]
+upload_source_maps = true
+workers_dev = false
+
+[images]
+binding = "IMAGES"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ming-image-worker-production"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "src/db/migrations"
+
+[[r2_buckets]]
+binding = "RONCALPHOTO_ORIGINALS_BUCKET"
+bucket_name = "roncalphoto-originals"
+
+[[r2_buckets]]
+binding = "RONCALPHOTO_MEDIA_BUCKET"
+bucket_name = "roncalphoto-media"
+
+[[queues.producers]]
+binding = "IMAGE_PROCESSING_QUEUE"
+queue = "ming-image-processing-production"
+
+[[queues.consumers]]
+queue = "ming-image-processing-production"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+retry_delay = 30
+dead_letter_queue = "ming-image-processing-dlq-production"
+
+[[queues.consumers]]
+queue = "ming-image-processing-dlq-production"
+max_batch_size = 1
+max_batch_timeout = 5
+
+[vars]
+R2_ACCOUNT_ID = "replace-with-cloudflare-account-id"
+RONCALPHOTO_ORIGINALS_BUCKET_NAME = "roncalphoto-originals"
+RONCALPHOTO_MEDIA_BUCKET_NAME = "roncalphoto-media"
+RONCALPHOTO_PUBLIC_MEDIA_BASE_URL = "https://media.roncalphoto.com"
+PROCESSING_QUEUE_NAME = "ming-image-processing-production"
+PROCESSING_DLQ_NAME = "ming-image-processing-dlq-production"
+
+[env.staging]
+name = "ming-image-worker-staging"
+
+[env.staging.images]
+binding = "IMAGES"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "ming-image-worker-staging"
+database_id = "00000000-0000-0000-0000-000000000002"
+migrations_dir = "src/db/migrations"
+
+[[env.staging.r2_buckets]]
+binding = "RONCALPHOTO_ORIGINALS_BUCKET"
+bucket_name = "roncalphoto-originals-staging"
+remote = true
+
+[[env.staging.r2_buckets]]
+binding = "RONCALPHOTO_MEDIA_BUCKET"
+bucket_name = "roncalphoto-media-staging"
+remote = true
+
+[[env.staging.queues.producers]]
+binding = "IMAGE_PROCESSING_QUEUE"
+queue = "ming-image-processing-staging"
+remote = true
+
+[[env.staging.queues.consumers]]
+queue = "ming-image-processing-staging"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+retry_delay = 30
+dead_letter_queue = "ming-image-processing-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "ming-image-processing-dlq-staging"
+max_batch_size = 1
+max_batch_timeout = 5
+
+[env.staging.vars]
+R2_ACCOUNT_ID = "replace-with-cloudflare-account-id"
+RONCALPHOTO_ORIGINALS_BUCKET_NAME = "roncalphoto-originals-staging"
+RONCALPHOTO_MEDIA_BUCKET_NAME = "roncalphoto-media-staging"
+RONCALPHOTO_PUBLIC_MEDIA_BASE_URL = "https://media-staging.roncalphoto.com"
+PROCESSING_QUEUE_NAME = "ming-image-processing-staging"
+PROCESSING_DLQ_NAME = "ming-image-processing-dlq-staging"
+
+[env.production]
+name = "ming-image-worker"
+
+[env.production.images]
+binding = "IMAGES"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "ming-image-worker-production"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "src/db/migrations"
+
+[[env.production.r2_buckets]]
+binding = "RONCALPHOTO_ORIGINALS_BUCKET"
+bucket_name = "roncalphoto-originals"
+remote = true
+
+[[env.production.r2_buckets]]
+binding = "RONCALPHOTO_MEDIA_BUCKET"
+bucket_name = "roncalphoto-media"
+remote = true
+
+[[env.production.queues.producers]]
+binding = "IMAGE_PROCESSING_QUEUE"
+queue = "ming-image-processing-production"
+remote = true
+
+[[env.production.queues.consumers]]
+queue = "ming-image-processing-production"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+retry_delay = 30
+dead_letter_queue = "ming-image-processing-dlq-production"
+
+[[env.production.queues.consumers]]
+queue = "ming-image-processing-dlq-production"
+max_batch_size = 1
+max_batch_timeout = 5
+
+[env.production.vars]
+R2_ACCOUNT_ID = "replace-with-cloudflare-account-id"
+RONCALPHOTO_ORIGINALS_BUCKET_NAME = "roncalphoto-originals"
+RONCALPHOTO_MEDIA_BUCKET_NAME = "roncalphoto-media"
+RONCALPHOTO_PUBLIC_MEDIA_BASE_URL = "https://media.roncalphoto.com"
+PROCESSING_QUEUE_NAME = "ming-image-processing-production"
+PROCESSING_DLQ_NAME = "ming-image-processing-dlq-production"

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "presets": {
+    "roncalphoto-portfolio": {
+      "version": 1,
+      "variants": {
+        "main": {
+          "format": "image/webp",
+          "width": 1920,
+          "fit": "scale-down",
+          "quality": 85
+        },
+        "thumbnail": {
+          "format": "image/webp",
+          "width": 480,
+          "fit": "scale-down",
+          "quality": 80
+        }
+      }
+    }
+  },
+  "products": {
+    "roncalphoto": {
+      "storageProfile": "roncalphoto",
+      "allowedPresets": ["roncalphoto-portfolio"],
+      "acceptedInputFormats": ["image/jpeg", "image/png", "image/webp"],
+      "maxUploadBytes": 26214400,
+      "presignedUrlTtlSeconds": 900,
+      "retainOriginal": true
+    }
+  }
+}
