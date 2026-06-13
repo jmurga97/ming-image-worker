@@ -10,8 +10,8 @@ binding = "IMAGES"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "ming-image-worker"
-database_id = "replace-with-d1-database-id"
+database_name = "ming-image-worker-production"
+database_id = "846bcac4-ea73-4a17-b29e-f1d3766ce957"
 migrations_dir = "src/db/migrations"
 
 [[r2_buckets]]
