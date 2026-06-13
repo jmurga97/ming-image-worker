@@ -18,7 +18,7 @@ export function createStorageRegistry(
       outputs: {
         binding: env.RONCALPHOTO_MEDIA_BUCKET,
         bucketName: runtime.RONCALPHOTO_MEDIA_BUCKET_NAME,
-        publicBaseUrl: runtime.RONCALPHOTO_PUBLIC_MEDIA_BASE_URL,
+        publicBaseUrl: runtime.RONCALPHOTO_PUBLIC_MEDIA_BASE_URL ?? null,
       },
     },
   };

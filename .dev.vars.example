@@ -1,8 +1,7 @@
 R2_ACCOUNT_ID=replace-with-cloudflare-account-id
 R2_ACCESS_KEY_ID=replace-with-bucket-scoped-access-key
 R2_SECRET_ACCESS_KEY=replace-with-bucket-scoped-secret
-RONCALPHOTO_ORIGINALS_BUCKET_NAME=roncalphoto-originals-staging
-RONCALPHOTO_MEDIA_BUCKET_NAME=roncalphoto-media-staging
-RONCALPHOTO_PUBLIC_MEDIA_BASE_URL=https://media-staging.roncalphoto.com
-PROCESSING_QUEUE_NAME=ming-image-processing-staging
-PROCESSING_DLQ_NAME=ming-image-processing-dlq-staging
+RONCALPHOTO_ORIGINALS_BUCKET_NAME=roncalphoto-originals
+RONCALPHOTO_MEDIA_BUCKET_NAME=roncalphoto-media
+PROCESSING_QUEUE_NAME=ming-image-processing
+PROCESSING_DLQ_NAME=ming-image-processing-dlq

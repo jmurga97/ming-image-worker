@@ -12,7 +12,7 @@ const runtimeSchema = z
     R2_SECRET_ACCESS_KEY: z.string().trim().min(1),
     RONCALPHOTO_ORIGINALS_BUCKET_NAME: z.string().trim().min(1),
     RONCALPHOTO_MEDIA_BUCKET_NAME: z.string().trim().min(1),
-    RONCALPHOTO_PUBLIC_MEDIA_BASE_URL: z.url(),
+    RONCALPHOTO_PUBLIC_MEDIA_BASE_URL: z.url().optional(),
     PROCESSING_QUEUE_NAME: z.string().trim().min(1),
     PROCESSING_DLQ_NAME: z.string().trim().min(1),
   })

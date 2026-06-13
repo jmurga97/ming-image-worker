@@ -232,7 +232,7 @@ Successful processing returns:
           "name": "main",
           "bucket": "roncalphoto-media",
           "key": "products/roncalphoto/uploads/.../main.webp",
-          "publicUrl": "https://media.roncalphoto.com/products/.../main.webp",
+          "publicUrl": null,
           "contentType": "image/webp",
           "width": 1920,
           "height": 1280,
@@ -242,7 +242,7 @@ Successful processing returns:
           "name": "thumbnail",
           "bucket": "roncalphoto-media",
           "key": "products/roncalphoto/uploads/.../thumbnail.webp",
-          "publicUrl": "https://media.roncalphoto.com/products/.../thumbnail.webp",
+          "publicUrl": null,
           "contentType": "image/webp",
           "width": 480,
           "height": 320,
@@ -340,7 +340,7 @@ must be declared in this repository's `wrangler.toml`.
 
 To add a product:
 
-1. Add originals and output R2 bindings to staging and production Wrangler environments.
+1. Add originals and output R2 bindings to `wrangler.toml`.
 2. Add the binding mapping to the TypeScript storage registry.
 3. Add the product and its allowed presets to `image-policy.json`.
 4. Configure R2 CORS and event notification for the originals bucket.
@@ -403,7 +403,7 @@ Runtime variables:
 | `R2_ACCOUNT_ID`                     | R2 S3-compatible endpoint                |
 | `RONCALPHOTO_ORIGINALS_BUCKET_NAME` | Name used for signing and event matching |
 | `RONCALPHOTO_MEDIA_BUCKET_NAME`     | Name returned in manifests               |
-| `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` | Public output URL base                   |
+| `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` | Optional public output URL base          |
 | `PROCESSING_QUEUE_NAME`             | Main Queue dispatch name                 |
 | `PROCESSING_DLQ_NAME`               | DLQ dispatch name                        |
 
@@ -417,59 +417,49 @@ Secrets:
 The R2 credentials should permit writes only to configured originals buckets. Never expose them
 to product backends or browsers.
 
+When `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` is omitted, variants are still written to the output
+bucket and returned with `publicUrl: null`. Add the variable later after connecting a public R2
+domain.
+
 ## Provisioning
 
-Replace the placeholder D1 IDs and Cloudflare account values in `wrangler.toml`.
-
-Create resources for each environment:
-
-```bash
-wrangler d1 create ming-image-worker-staging
-wrangler d1 create ming-image-worker-production
-
-wrangler queues create ming-image-processing-staging
-wrangler queues create ming-image-processing-dlq-staging
-wrangler queues create ming-image-processing-production
-wrangler queues create ming-image-processing-dlq-production
-
-wrangler r2 bucket create roncalphoto-originals-staging
-wrangler r2 bucket create roncalphoto-media-staging
-wrangler r2 bucket create roncalphoto-originals
-wrangler r2 bucket create roncalphoto-media
-```
-
-Create R2 event notifications:
+The repository defines one Worker and one set of remote Cloudflare resources. Create them before
+running remote development or deploying:
 
 ```bash
-wrangler r2 bucket notification create roncalphoto-originals-staging \
-  --event-type object-create \
-  --queue ming-image-processing-staging \
-  --description "ming-image-worker staging uploads"
-
-wrangler r2 bucket notification create roncalphoto-originals \
-  --event-type object-create \
-  --queue ming-image-processing-production \
-  --description "ming-image-worker production uploads"
+bunx wrangler d1 create ming-image-worker
+bunx wrangler queues create ming-image-processing
+bunx wrangler queues create ming-image-processing-dlq
+bunx wrangler r2 bucket create roncalphoto-originals
+bunx wrangler r2 bucket create roncalphoto-media
 ```
 
-Configure R2 CORS on each originals bucket so only the product admin origin can perform `PUT` with
-the required `Content-Type`. R2 CORS is separate from this Worker and must be maintained per
-bucket.
+Copy the D1 ID returned by Wrangler into `wrangler.toml`, replacing
+`replace-with-d1-database-id`. The R2 buckets may already exist; do not recreate them when they do.
+
+Connect originals uploads to the processing Queue:
+
+```bash
+bunx wrangler r2 bucket notification create roncalphoto-originals \
+  --event-type object-create \
+  --queue ming-image-processing \
+  --description "ming-image-worker uploads"
+```
+
+Configure R2 CORS on the originals bucket so only the product admin origin can perform `PUT` with
+the required `Content-Type`. R2 CORS is separate from this Worker.
 
 Set secrets:
 
 ```bash
-wrangler secret put R2_ACCESS_KEY_ID --env staging
-wrangler secret put R2_SECRET_ACCESS_KEY --env staging
-wrangler secret put R2_ACCESS_KEY_ID --env production
-wrangler secret put R2_SECRET_ACCESS_KEY --env production
+bunx wrangler secret put R2_ACCESS_KEY_ID
+bunx wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
 Apply migrations and deploy:
 
 ```bash
-bun run deploy:staging
-bun run deploy:production
+bun run deploy
 ```
 
 ## Consumer configuration
@@ -530,13 +520,13 @@ calls `ming-image-worker` directly.
 bun install
 cp .dev.vars.example .dev.vars
 bun run cf-typegen
-bun run db:migrate:staging
+bun run db:migrate
 bun run dev
 ```
 
-Staging Wrangler bindings use remote D1, R2, Images, and Queue resources. Local requests can write
-real objects and jobs, and uploaded objects can be consumed by the deployed staging Queue
-consumer. Do not point local development at production resources.
+`bun run dev` uses Wrangler remote mode so signed uploads, R2 notifications, Queues, Images, and
+D1 participate in the complete flow. It writes real objects and jobs to the single configured
+resource set. It requires the D1 placeholder to be replaced and all resources above to exist.
 
 ## Logging
 
@@ -569,12 +559,10 @@ filenames, or operational metadata.
 ```bash
 bun run dev
 bun run build
-bun run deploy:staging
-bun run deploy:production
+bun run deploy
 bun run cf-typegen
 bun run db:generate
-bun run db:migrate:staging
-bun run db:migrate:production
+bun run db:migrate
 bun run check
 bun test
 bun run lint
@@ -587,10 +575,10 @@ future coverage and currently exits with "No tests found".
 
 ## Verification checklist
 
-Before production deployment:
+Before deployment:
 
 1. `bun run check`, `bun run lint`, and `bun run build` pass.
-2. Staging original upload succeeds through a product backend.
+2. An original upload succeeds through a product backend.
 3. R2 emits an event and both variants appear with immutable cache headers.
 4. Status polling returns detected source metadata and complete named variants.
 5. The product backend persists its entity exactly once.
@@ -606,6 +594,7 @@ Before production deployment:
 - Upload remains `awaiting_upload`: verify the R2 event notification targets the configured Queue.
 - Upload returns to `queued`: inspect the status response's retryable error and provider health.
 - Upload reaches `PROCESSING_RETRIES_EXHAUSTED`: inspect the DLQ and provider availability.
-- Manifest URLs are incorrect: configure the output profile's public base URL.
+- Manifest URLs are `null`: configure `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` after connecting a
+  public domain to the output bucket.
 - Local changes are not processing: remote Queue events are consumed by the deployed Worker, so
-  deploy staging consumer changes before exercising remote uploads.
+  deploy consumer changes before exercising remote uploads.
