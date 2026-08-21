@@ -1,13 +1,18 @@
-[
-  {
-    "AllowedOrigins": [
-      "https://admin.qmenut.app",
-      "https://admin.dev.qmenut.app",
-      "http://localhost:5174"
-    ],
-    "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
+{
+  "rules": [
+    {
+      "id": "qmenut-admin-uploads",
+      "allowed": {
+        "origins": [
+          "https://admin.qmenut.app",
+          "https://admin.dev.qmenut.app",
+          "http://localhost:5174"
+        ],
+        "methods": ["PUT"],
+        "headers": ["Content-Type"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}
