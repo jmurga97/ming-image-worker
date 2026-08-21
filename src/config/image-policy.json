@@ -17,6 +17,39 @@
           "quality": 80
         }
       }
+    },
+    "qmenut-logo": {
+      "version": 1,
+      "variants": {
+        "main": {
+          "format": "image/webp",
+          "width": 512,
+          "fit": "scale-down",
+          "quality": 90
+        }
+      }
+    },
+    "qmenut-menu-image": {
+      "version": 1,
+      "variants": {
+        "main": {
+          "format": "image/webp",
+          "width": 1024,
+          "fit": "scale-down",
+          "quality": 82
+        }
+      }
+    },
+    "qmenut-branch-photo": {
+      "version": 1,
+      "variants": {
+        "main": {
+          "format": "image/webp",
+          "width": 1600,
+          "fit": "scale-down",
+          "quality": 84
+        }
+      }
     }
   },
   "products": {
@@ -27,6 +60,14 @@
       "maxUploadBytes": 26214400,
       "presignedUrlTtlSeconds": 900,
       "retainOriginal": true
+    },
+    "qmenut": {
+      "storageProfile": "qmenut",
+      "allowedPresets": ["qmenut-logo", "qmenut-menu-image", "qmenut-branch-photo"],
+      "acceptedInputFormats": ["image/jpeg", "image/png", "image/webp"],
+      "maxUploadBytes": 26214400,
+      "presignedUrlTtlSeconds": 900,
+      "retainOriginal": false
     }
   }
 }

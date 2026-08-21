@@ -21,6 +21,18 @@ export function createStorageRegistry(
         publicBaseUrl: runtime.RONCALPHOTO_PUBLIC_MEDIA_BASE_URL ?? null,
       },
     },
+    qmenut: {
+      id: "qmenut",
+      originals: {
+        binding: env.QMENUT_STAGING_BUCKET,
+        bucketName: runtime.QMENUT_STAGING_BUCKET_NAME,
+      },
+      outputs: {
+        binding: env.QMENUT_MEDIA_BUCKET,
+        bucketName: runtime.QMENUT_MEDIA_BUCKET_NAME,
+        publicBaseUrl: runtime.QMENUT_PUBLIC_MEDIA_BASE_URL,
+      },
+    },
   };
 }
 

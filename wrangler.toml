@@ -22,6 +22,14 @@ bucket_name = "roncalphoto-originals"
 binding = "RONCALPHOTO_MEDIA_BUCKET"
 bucket_name = "roncalphoto-media"
 
+[[r2_buckets]]
+binding = "QMENUT_STAGING_BUCKET"
+bucket_name = "qmenut-image-staging"
+
+[[r2_buckets]]
+binding = "QMENUT_MEDIA_BUCKET"
+bucket_name = "qmenut-media"
+
 [[queues.producers]]
 binding = "IMAGE_PROCESSING_QUEUE"
 queue = "ming-image-processing-production"
@@ -43,5 +51,8 @@ max_batch_timeout = 5
 R2_ACCOUNT_ID = "fee0d037c4a95bd94c997ee2a8b520be"
 RONCALPHOTO_ORIGINALS_BUCKET_NAME = "roncalphoto-originals"
 RONCALPHOTO_MEDIA_BUCKET_NAME = "roncalphoto-media"
+QMENUT_STAGING_BUCKET_NAME = "qmenut-image-staging"
+QMENUT_MEDIA_BUCKET_NAME = "qmenut-media"
+QMENUT_PUBLIC_MEDIA_BASE_URL = "https://media.qmenut.app"
 PROCESSING_QUEUE_NAME = "ming-image-processing-production"
 PROCESSING_DLQ_NAME = "ming-image-processing-dlq-production"

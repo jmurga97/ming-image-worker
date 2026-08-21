@@ -284,7 +284,7 @@ GET /openapi.json
 and an allowed preset; they cannot provide dimensions, quality, fit, output format, bucket names,
 or object keys.
 
-The initial policy contains:
+The policy contains two independent consumers:
 
 ```text
 product: roncalphoto
@@ -297,6 +297,22 @@ retain original: true
 preset: roncalphoto-portfolio v1
 main: WebP, width 1920, scale-down, quality 85
 thumbnail: WebP, width 480, scale-down, quality 80
+
+product: qmenut
+storage profile: qmenut
+accepted inputs: JPEG, PNG, WebP
+maximum input: 25 MiB
+signed URL TTL: 15 minutes
+retain original: false
+
+preset: qmenut-logo v1
+main: WebP, width 512, scale-down, quality 90
+
+preset: qmenut-menu-image v1
+main: WebP, width 1024, scale-down, quality 82
+
+preset: qmenut-branch-photo v1
+main: WebP, width 1600, scale-down, quality 84
 ```
 
 When changing a preset's transform behavior, increment its version and keep the old definition in
@@ -395,6 +411,8 @@ Bindings:
 | `IMAGE_PROCESSING_QUEUE`       | Queue producer | Explicit retries                     |
 | `RONCALPHOTO_ORIGINALS_BUCKET` | R2             | Private original uploads             |
 | `RONCALPHOTO_MEDIA_BUCKET`     | R2             | Processed output variants            |
+| `QMENUT_STAGING_BUCKET`        | R2             | Private temporary qmenut uploads     |
+| `QMENUT_MEDIA_BUCKET`          | R2             | Public optimized qmenut images       |
 
 Runtime variables:
 
@@ -404,6 +422,9 @@ Runtime variables:
 | `RONCALPHOTO_ORIGINALS_BUCKET_NAME` | Name used for signing and event matching |
 | `RONCALPHOTO_MEDIA_BUCKET_NAME`     | Name returned in manifests               |
 | `RONCALPHOTO_PUBLIC_MEDIA_BASE_URL` | Optional public output URL base          |
+| `QMENUT_STAGING_BUCKET_NAME`        | Name used for signing and event matching |
+| `QMENUT_MEDIA_BUCKET_NAME`          | Name returned in qmenut manifests        |
+| `QMENUT_PUBLIC_MEDIA_BASE_URL`      | Public qmenut output URL base            |
 | `PROCESSING_QUEUE_NAME`             | Main Queue dispatch name                 |
 | `PROCESSING_DLQ_NAME`               | DLQ dispatch name                        |
 
@@ -428,10 +449,12 @@ running remote development or deploying:
 
 ```bash
 bunx wrangler d1 create ming-image-worker
-bunx wrangler queues create ming-image-processing
-bunx wrangler queues create ming-image-processing-dlq
+bunx wrangler queues create ming-image-processing-production
+bunx wrangler queues create ming-image-processing-dlq-production
 bunx wrangler r2 bucket create roncalphoto-originals
 bunx wrangler r2 bucket create roncalphoto-media
+bunx wrangler r2 bucket create qmenut-image-staging
+bunx wrangler r2 bucket create qmenut-media
 ```
 
 Copy the D1 ID returned by Wrangler into `wrangler.toml`, replacing
@@ -442,9 +465,35 @@ Connect originals uploads to the processing Queue:
 ```bash
 bunx wrangler r2 bucket notification create roncalphoto-originals \
   --event-type object-create \
-  --queue ming-image-processing \
+  --queue ming-image-processing-production \
   --description "ming-image-worker uploads"
 ```
+
+qmenut uses the same Queue with a product-key prefix so unrelated bucket objects cannot create
+jobs:
+
+```bash
+bunx wrangler r2 bucket notification create qmenut-image-staging \
+  --event-type object-create \
+  --queue ming-image-processing-production \
+  --prefix "products/qmenut/uploads/" \
+  --description "qmenut image uploads"
+```
+
+Apply the checked-in browser upload CORS policy and the one-day staging fallback:
+
+```bash
+bunx wrangler r2 bucket cors set qmenut-image-staging \
+  --file examples/qmenut-staging-cors.json
+
+bunx wrangler r2 bucket lifecycle add qmenut-image-staging \
+  qmenut-staging-fallback "products/qmenut/uploads/" --expire-days 1
+```
+
+Connect `qmenut-media` to the `media.qmenut.app` R2 custom domain in Cloudflare before deploying
+the qmenut consumer. The output bucket is public through that domain; the staging bucket remains
+private. Successful qmenut jobs delete their originals immediately, while the lifecycle rule is a
+fallback for abandoned uploads and failed processing.
 
 Configure R2 CORS on the originals bucket so only the product admin origin can perform `PUT` with
 the required `Content-Type`. R2 CORS is separate from this Worker.
@@ -499,6 +548,19 @@ const response = await env.IMAGE_WORKER.fetch(
   },
 );
 ```
+
+qmenut uses `productId=qmenut` and selects one closed preset from its server-side purpose mapping:
+
+```text
+branchLogo    -> qmenut-logo
+branchPhoto   -> qmenut-branch-photo
+categoryImage -> qmenut-menu-image
+dishImage     -> qmenut-menu-image
+```
+
+The qmenut browser never receives a preset ID. Its API hashes the restaurant, branch, and purpose
+into `externalId`, then revalidates that ownership, the preset, and the exact returned
+`https://media.qmenut.app/.../main.webp` URL before persisting a domain record.
 
 The backend returns the signed URL to its authenticated browser. The browser uploads directly:
 
@@ -585,6 +647,8 @@ Before deployment:
 6. Duplicate events and repeated polling do not duplicate variants or product records.
 7. A transient failure retries and exhausted delivery reaches the DLQ.
 8. Original retention matches product policy.
+9. qmenut originals are deleted after success and abandoned objects have a one-day expiration.
+10. qmenut outputs resolve through `https://media.qmenut.app` with immutable cache metadata.
 
 ## Troubleshooting
 

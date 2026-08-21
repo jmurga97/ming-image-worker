@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://admin.qmenut.app",
+      "https://admin.dev.qmenut.app",
+      "http://localhost:5174"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
