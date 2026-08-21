@@ -45,7 +45,6 @@ export function resolveStorageProfile(
   if (!profile) {
     throw new ServiceError(
       "INTERNAL_SERVER_ERROR",
-      500,
       `Storage profile "${profileId}" is not configured`,
     );
   }

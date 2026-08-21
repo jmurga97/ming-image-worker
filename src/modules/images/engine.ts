@@ -29,11 +29,11 @@ export class CloudflareImagesEngine implements ImageOptimizationEngine {
     try {
       info = await this.images.info(stream);
     } catch {
-      throw new ServiceError("INVALID_IMAGE", 415, "The uploaded object is not a valid image");
+      throw new ServiceError("INVALID_IMAGE", "The uploaded object is not a valid image");
     }
 
     if (!info.width || !info.height) {
-      throw new ServiceError("INVALID_IMAGE", 415, "Image dimensions could not be detected");
+      throw new ServiceError("INVALID_IMAGE", "Image dimensions could not be detected");
     }
 
     return {
@@ -62,7 +62,7 @@ export class CloudflareImagesEngine implements ImageOptimizationEngine {
     const response = result.response();
 
     if (!response.ok) {
-      throw new ServiceError("IMAGE_PROCESSING_FAILED", 502, "Image transformation failed", true);
+      throw new ServiceError("IMAGE_PROCESSING_FAILED", "Image transformation failed", true);
     }
 
     const bytes = await response.arrayBuffer();

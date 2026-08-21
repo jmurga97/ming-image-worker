@@ -19,7 +19,6 @@ export type ServiceErrorCode =
 export class ServiceError extends Error {
   constructor(
     public readonly code: ServiceErrorCode,
-    public readonly status: 400 | 403 | 404 | 409 | 413 | 415 | 500 | 502 | 503,
     message: string,
     public readonly retryable = false,
   ) {
@@ -33,5 +32,5 @@ export function toServiceError(error: unknown): ServiceError {
     return error;
   }
 
-  return new ServiceError("INTERNAL_SERVER_ERROR", 500, "Internal server error");
+  return new ServiceError("INTERNAL_SERVER_ERROR", "Internal server error");
 }

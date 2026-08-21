@@ -93,7 +93,6 @@ export class UploadsService {
       if (existing.requestFingerprint !== fingerprint) {
         throw new ServiceError(
           "IDEMPOTENCY_CONFLICT",
-          409,
           "Idempotency-Key was already used with a different request",
         );
       }
@@ -133,7 +132,6 @@ export class UploadsService {
       if (concurrent.requestFingerprint !== fingerprint) {
         throw new ServiceError(
           "IDEMPOTENCY_CONFLICT",
-          409,
           "Idempotency-Key was already used with a different request",
         );
       }
@@ -149,7 +147,7 @@ export class UploadsService {
     const job = await this.repository.findByProductAndId(uploadId, productId);
 
     if (!job) {
-      throw new ServiceError("UPLOAD_NOT_FOUND", 404, "Upload job not found");
+      throw new ServiceError("UPLOAD_NOT_FOUND", "Upload job not found");
     }
 
     const variants = await this.repository.listVariants(job.id);
@@ -182,18 +180,18 @@ export class UploadsService {
     const job = await this.repository.findByProductAndId(uploadId, productId);
 
     if (!job) {
-      throw new ServiceError("UPLOAD_NOT_FOUND", 404, "Upload job not found");
+      throw new ServiceError("UPLOAD_NOT_FOUND", "Upload job not found");
     }
 
     if (job.status !== "failed") {
-      throw new ServiceError("UPLOAD_NOT_RETRYABLE", 409, "Only failed uploads can be retried");
+      throw new ServiceError("UPLOAD_NOT_RETRYABLE", "Only failed uploads can be retried");
     }
 
     const storage = resolveStorageProfile(this.storageRegistry, job.storageProfileId);
     const original = await storage.originals.binding.head(job.originalKey);
 
     if (!original) {
-      throw new ServiceError("ORIGINAL_NOT_FOUND", 409, "Original image is no longer available");
+      throw new ServiceError("ORIGINAL_NOT_FOUND", "Original image is no longer available");
     }
 
     await this.queue.send({
@@ -208,7 +206,7 @@ export class UploadsService {
     const product = this.runtime.policy.products[productId];
 
     if (!product) {
-      throw new ServiceError("PRODUCT_NOT_ALLOWED", 403, "Product is not configured");
+      throw new ServiceError("PRODUCT_NOT_ALLOWED", "Product is not configured");
     }
 
     return product;
@@ -218,13 +216,13 @@ export class UploadsService {
     const product = this.resolveProduct(productId);
 
     if (!product.allowedPresets.includes(presetId)) {
-      throw new ServiceError("PRESET_NOT_ALLOWED", 403, "Preset is not allowed for this product");
+      throw new ServiceError("PRESET_NOT_ALLOWED", "Preset is not allowed for this product");
     }
 
     const preset = this.runtime.policy.presets[presetId];
 
     if (!preset) {
-      throw new ServiceError("PRESET_NOT_ALLOWED", 403, "Preset is not configured");
+      throw new ServiceError("PRESET_NOT_ALLOWED", "Preset is not configured");
     }
 
     return {
@@ -240,13 +238,12 @@ export class UploadsService {
     if (!product.acceptedInputFormats.includes(contentType as AcceptedImageMimeType)) {
       throw new ServiceError(
         "UNSUPPORTED_MEDIA_TYPE",
-        415,
         "Image format is not allowed for this product",
       );
     }
 
     if (input.sizeBytes > product.maxUploadBytes) {
-      throw new ServiceError("UPLOAD_TOO_LARGE", 413, "Image exceeds the product upload limit");
+      throw new ServiceError("UPLOAD_TOO_LARGE", "Image exceeds the product upload limit");
     }
   }
 

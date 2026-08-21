@@ -2,14 +2,16 @@
 
 ## Project
 
-Standalone private multi-product image upload and optimization worker built with Bun, Hono,
-Zod, Drizzle, R2, Cloudflare Images, D1, and Queues.
+Standalone private multi-product image upload and optimization worker built with Bun, Workers RPC
+(`ImageRpc` entrypoint), Zod, Drizzle, R2, Cloudflare Images, D1, and Queues. Its only consumers
+are the roncalphoto and qmenut backends.
 
 ## Rules
 
 - Use Bun exclusively.
 - Keep TypeScript strict and avoid `any`.
 - Keep the Worker private to same-account service bindings; do not add browser CORS.
+- RPC methods return success/error envelopes and never throw to callers.
 - Treat configured consumers as trusted and keep presets and storage profiles closed server-side.
 - Never accept bucket names, object keys, dimensions, quality, or arbitrary transforms from callers.
 - Keep product business metadata and product database writes outside this repository.
@@ -20,7 +22,7 @@ Zod, Drizzle, R2, Cloudflare Images, D1, and Queues.
 ## Architecture
 
 ```text
-Browser -> Product backend -> service binding -> ming-image-worker -> signed R2 PUT
+Browser -> Product backend -> ImageRpc.createUpload -> ming-image-worker -> signed R2 PUT
 R2 object-create -> Queue -> ming-image-worker -> Cloudflare Images -> output R2
-Product backend -> service binding polling -> product database
+Product backend -> ImageRpc.getUpload polling -> product database
 ```

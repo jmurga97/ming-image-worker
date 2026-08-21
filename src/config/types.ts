@@ -1,6 +1,3 @@
-import type { RuntimeConfig } from "./runtime";
-import type { OpenAPIHono } from "@hono/zod-openapi";
-
 export interface ImageInfoResponse {
   format: string;
   fileSize?: number;
@@ -64,12 +61,3 @@ export interface Bindings {
   PROCESSING_QUEUE_NAME: string;
   PROCESSING_DLQ_NAME: string;
 }
-
-export type AppBindings = {
-  Bindings: Bindings;
-  Variables: {
-    runtimeConfig: RuntimeConfig;
-  };
-};
-
-export type App = OpenAPIHono<AppBindings>;

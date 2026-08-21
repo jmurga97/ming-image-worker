@@ -2,20 +2,21 @@
 
 Private multi-product image upload and optimization service for Cloudflare Workers.
 
-The Worker is called only by trusted backends through same-account Cloudflare service bindings.
-It creates presigned R2 uploads, tracks processing in its own D1 database, receives R2
-`object-create` events through Cloudflare Queues, transforms images with Cloudflare Images, and
-returns a stable output manifest for the product backend to persist in its own domain.
+The Worker is called only by trusted backends through same-account Cloudflare service bindings
+using the named `ImageRpc` RPC entrypoint. It creates presigned R2 uploads, tracks processing in
+its own D1 database, receives R2 `object-create` events through Cloudflare Queues, transforms
+images with Cloudflare Images, and returns a stable output manifest for the product backend to
+persist in its own domain.
 
 ```text
-Browser -> Product backend -> service binding -> ming-image-worker -> presigned R2 PUT
+Browser -> Product backend -> ImageRpc.createUpload -> ming-image-worker -> presigned R2 PUT
 Browser -> R2 originals bucket -> object-create event -> Queue
 Queue -> ming-image-worker -> Cloudflare Images -> output R2
-Product backend -> service binding polling -> product database
+Product backend -> ImageRpc.getUpload polling -> product database
 ```
 
-This is not a public image API. `workers_dev` is disabled, no public route or browser CORS
-middleware is configured, and only the signed R2 PUT URL is browser-facing.
+This is not a public image API. `workers_dev` is disabled, there is no HTTP route besides a fixed
+health response, and only the signed R2 PUT URL is browser-facing.
 
 ## Responsibility boundaries
 
@@ -40,14 +41,14 @@ Each product backend owns:
 
 All Workers with a service binding are trusted in v1. They can select any configured `productId`.
 Do not grant the binding to an untrusted Worker. If consumers later require isolation inside one
-Cloudflare account, introduce named entrypoints or consumer credentials before onboarding them.
+Cloudflare account, introduce per-consumer entrypoints or credentials before onboarding them.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     B["Browser"] -->|"Request upload"| P["Product backend"]
-    P -->|"POST /v1/uploads via service binding"| W["ming-image-worker"]
+    P -->|"ImageRpc.createUpload"| W["ming-image-worker"]
     W --> D1["Worker-owned D1"]
     W -->|"Presigned PUT URL"| P
     P --> B
@@ -56,7 +57,7 @@ flowchart LR
     Q --> W
     W --> I["Cloudflare Images"]
     W --> R2M["Product media R2"]
-    P -->|"GET upload status"| W
+    P -->|"ImageRpc.getUpload"| W
     P --> DB["Product database"]
 ```
 
@@ -70,7 +71,7 @@ sequenceDiagram
     participant M as Media R2
 
     B->>P: Upload metadata and business fields
-    P->>W: POST /v1/uploads?productId=... + Idempotency-Key
+    P->>W: ImageRpc.createUpload(productId, idempotencyKey, upload)
     W->>W: Validate policy and create D1 job
     W-->>P: uploadId and signed PUT
     P-->>B: signed PUT
@@ -81,7 +82,7 @@ sequenceDiagram
     W->>W: claim D1 processing lease
     W->>M: write deterministic variants
     W->>W: commit source and variant manifest
-    P->>W: GET /v1/uploads/{id}
+    P->>W: ImageRpc.getUpload(productId, uploadId)
     W-->>P: succeeded manifest
     P->>P: persist product entity
 ```
@@ -89,8 +90,8 @@ sequenceDiagram
 ## Technology
 
 - Bun for package management and project scripts.
-- Hono and `@hono/zod-openapi` for the private HTTP contract.
-- Zod for request, runtime, and product-policy validation.
+- Workers RPC through the named `ImageRpc` entrypoint for the private contract.
+- Zod for RPC input, runtime, and product-policy validation.
 - D1 and Drizzle schema definitions for job persistence.
 - R2 and `aws4fetch` for direct presigned uploads.
 - Cloudflare Images bindings for transformations.
@@ -101,61 +102,39 @@ sequenceDiagram
 
 ```text
 src/
-├── app/                    # Hono bootstrap, OpenAPI, and route registration
-├── config/                 # Runtime parsing, image policy, and handlers
+├── config/                   # Runtime parsing, image policy, and shared types
 ├── db/
-│   ├── migrations/         # Worker-owned D1 migrations
-│   └── schema/             # Drizzle schema
+│   ├── migrations/           # Worker-owned D1 migrations
+│   └── schema/               # Drizzle schema
 ├── modules/
-│   ├── images/             # Cloudflare Images adapter
-│   ├── processing/         # Queue, leases, retries, transforms, retention
-│   ├── storage/            # R2 registry, keys, URLs, signing
-│   └── uploads/            # Private HTTP contract and job repository
-├── shared/                 # Stable errors and HTTP/OpenAPI helpers
-└── index.ts                # Fetch and Queue handlers
+│   ├── images/               # Cloudflare Images adapter
+│   ├── processing/           # Queue, leases, retries, transforms, retention
+│   ├── storage/              # R2 registry, keys, URLs, signing
+│   └── uploads/              # RPC validation schemas and job repository
+├── rpc/                      # ImageRpc entrypoint and request handlers
+├── shared/                   # Stable errors and response envelopes
+└── index.ts                  # Health fetch, Queue handler, and ImageRpc export
 ```
 
-## Private HTTP contract
+## Private RPC contract
 
-Consumers call an arbitrary internal URL through `serviceBinding.fetch`; the hostname is not used
-for routing:
+Consumers bind the Worker with a named entrypoint and call RPC methods directly:
 
-```ts
-const response = await env.IMAGE_WORKER.fetch(
-  "https://image-worker.internal/v1/uploads?productId=roncalphoto",
-  request,
-);
-```
-
-Every successful response uses:
-
-```json
+```jsonc
 {
-  "success": true,
-  "data": {}
+  "binding": "IMAGE_WORKER",
+  "service": "ming-image-worker",
+  "entrypoint": "ImageRpc",
 }
 ```
 
-Every failed response uses:
+The `ImageRpc` entrypoint exposes:
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "STABLE_ERROR_CODE",
-    "message": "Safe message",
-    "retryable": false
-  }
-}
-```
+- `createUpload({ productId, idempotencyKey, upload }): Promise<envelope>`
+- `getUpload({ productId, uploadId }): Promise<envelope>`
+- `retryUpload({ productId, uploadId }): Promise<envelope>`
 
-### Create an upload
-
-```text
-POST /v1/uploads?productId=<product-id>
-Idempotency-Key: <8-160 character key>
-Content-Type: application/json
-```
+`upload` accepts only:
 
 ```json
 {
@@ -171,32 +150,68 @@ Content-Type: application/json
 }
 ```
 
+Methods never throw. Every result is a plain envelope:
+
+```json
+{ "success": true, "data": {} }
+```
+
 ```json
 {
-  "success": true,
-  "data": {
-    "uploadId": "c45de47d-53a3-4df1-a2b0-928879bbc334",
-    "status": "awaiting_upload",
-    "upload": {
-      "url": "https://<account>.r2.cloudflarestorage.com/...",
-      "expiresAt": "2026-06-12T12:15:00.000Z",
-      "headers": {
-        "Content-Type": "image/jpeg"
-      }
+  "success": false,
+  "error": {
+    "code": "STABLE_ERROR_CODE",
+    "message": "Safe message",
+    "retryable": false
+  }
+}
+```
+
+### Create an upload
+
+```ts
+const body = await env.IMAGE_WORKER.createUpload({
+  productId: "roncalphoto",
+  idempotencyKey, // 8-160 characters, unique per logical upload
+  upload: {
+    presetId: "roncalphoto-portfolio",
+    externalId: reservedPhotoId,
+    filename: file.name,
+    contentType: file.type,
+    sizeBytes: file.size,
+    metadata: { requestId, source: "photos-admin" },
+  },
+});
+```
+
+A successful `data` payload contains the created job and the browser-facing signed PUT:
+
+```json
+{
+  "uploadId": "c45de47d-53a3-4df1-a2b0-928879bbc334",
+  "status": "awaiting_upload",
+  "upload": {
+    "url": "https://<account>.r2.cloudflarestorage.com/...",
+    "expiresAt": "2026-06-12T12:15:00.000Z",
+    "headers": {
+      "Content-Type": "image/jpeg"
     }
   }
 }
 ```
 
-The same `productId` and `Idempotency-Key` with the same request returns the existing job. While
+The same `productId` and `idempotencyKey` with the same request returns the existing job. While
 the job is `awaiting_upload`, a fresh signed URL is returned. Reusing the key with different input
 returns `IDEMPOTENCY_CONFLICT`. Once processing has started, `upload` is `null` to prevent an
 original from being overwritten.
 
 ### Get upload status
 
-```text
-GET /v1/uploads/{uploadId}?productId=<product-id>
+```ts
+const body = await env.IMAGE_WORKER.getUpload({
+  productId: "roncalphoto",
+  uploadId,
+});
 ```
 
 Status is one of:
@@ -211,72 +226,67 @@ Successful processing returns:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "uploadId": "c45de47d-53a3-4df1-a2b0-928879bbc334",
-    "productId": "roncalphoto",
-    "presetId": "roncalphoto-portfolio",
-    "externalId": "photo-reservation-id",
-    "status": "succeeded",
-    "attempts": 1,
-    "originalRetentionStatus": "retained",
-    "manifest": {
-      "source": {
-        "contentType": "image/jpeg",
-        "width": 6000,
-        "height": 4000,
-        "sizeBytes": 4213371
-      },
-      "variants": {
-        "main": {
-          "name": "main",
-          "bucket": "roncalphoto-media",
-          "key": "products/roncalphoto/uploads/.../main.webp",
-          "publicUrl": null,
-          "contentType": "image/webp",
-          "width": 1920,
-          "height": 1280,
-          "sizeBytes": 318224
-        },
-        "thumbnail": {
-          "name": "thumbnail",
-          "bucket": "roncalphoto-media",
-          "key": "products/roncalphoto/uploads/.../thumbnail.webp",
-          "publicUrl": null,
-          "contentType": "image/webp",
-          "width": 480,
-          "height": 320,
-          "sizeBytes": 38210
-        }
-      }
+  "uploadId": "c45de47d-53a3-4df1-a2b0-928879bbc334",
+  "productId": "roncalphoto",
+  "presetId": "roncalphoto-portfolio",
+  "externalId": "photo-reservation-id",
+  "status": "succeeded",
+  "attempts": 1,
+  "originalRetentionStatus": "retained",
+  "manifest": {
+    "source": {
+      "contentType": "image/jpeg",
+      "width": 6000,
+      "height": 4000,
+      "sizeBytes": 4213371
     },
-    "error": null,
-    "createdAt": "2026-06-12T12:00:00.000Z",
-    "updatedAt": "2026-06-12T12:01:00.000Z",
-    "completedAt": "2026-06-12T12:01:00.000Z"
-  }
+    "variants": {
+      "main": {
+        "name": "main",
+        "bucket": "roncalphoto-media",
+        "key": "products/roncalphoto/uploads/.../main.webp",
+        "publicUrl": null,
+        "contentType": "image/webp",
+        "width": 1920,
+        "height": 1280,
+        "sizeBytes": 318224
+      },
+      "thumbnail": {
+        "name": "thumbnail",
+        "bucket": "roncalphoto-media",
+        "key": "products/roncalphoto/uploads/.../thumbnail.webp",
+        "publicUrl": null,
+        "contentType": "image/webp",
+        "width": 480,
+        "height": 320,
+        "sizeBytes": 38210
+      }
+    }
+  },
+  "error": null,
+  "createdAt": "2026-06-12T12:00:00.000Z",
+  "updatedAt": "2026-06-12T12:01:00.000Z",
+  "completedAt": "2026-06-12T12:01:00.000Z"
 }
 ```
 
 ### Retry a failed upload
 
-```text
-POST /v1/uploads/{uploadId}/retry?productId=<product-id>
+```ts
+const body = await env.IMAGE_WORKER.retryUpload({
+  productId: "roncalphoto",
+  uploadId,
+});
 ```
 
-Retry is allowed only when the job is `failed` and the original still exists. The endpoint first
-sends an internal retry message to `IMAGE_PROCESSING_QUEUE` without changing job state. The
-response can therefore still report `failed` until the Queue consumes that message. The explicit
-retry message then moves the job through `queued` into `processing`.
+Retry is allowed only when the job is `failed` and the original still exists. The method first
+sends an internal retry message to `IMAGE_PROCESSING_QUEUE` without changing job state, then
+returns the current job. The job can therefore still report `failed` until the Queue consumes that
+message and moves it through `queued` into `processing`.
 
-### Health and OpenAPI
+### Health
 
-The private service also exposes:
-
-```text
-GET /health
-GET /openapi.json
-```
+The default export also answers any fetch with a fixed health envelope for deployment checks.
 
 ## Product policy
 
@@ -364,8 +374,8 @@ To add a product:
 
 ## Processing and delivery guarantees
 
-R2 emits `object-create` notifications to the processing Queue. There is no upload-completion HTTP
-endpoint.
+R2 emits `object-create` notifications to the processing Queue. There is no upload-completion RPC
+method.
 
 Queue delivery is at least once. Processing is idempotent through:
 
@@ -513,40 +523,42 @@ bun run deploy
 
 ## Consumer configuration
 
-The product Worker declares:
+The product Worker declares a service binding with the `ImageRpc` entrypoint:
 
-```toml
-[[services]]
-binding = "IMAGE_WORKER"
-service = "ming-image-worker"
-remote = true
+```jsonc
+{
+  "binding": "IMAGE_WORKER",
+  "service": "ming-image-worker",
+  "entrypoint": "ImageRpc",
+  "remote": true,
+}
 ```
 
 A product backend should validate its business input, reserve any product identifier, and forward
 only the neutral image request:
 
 ```ts
-const response = await env.IMAGE_WORKER.fetch(
-  "https://image-worker.internal/v1/uploads?productId=roncalphoto",
-  {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "idempotency-key": idempotencyKey,
+const body = await env.IMAGE_WORKER.createUpload({
+  productId: "roncalphoto",
+  idempotencyKey,
+  upload: {
+    presetId: "roncalphoto-portfolio",
+    externalId: reservedPhotoId,
+    filename: file.name,
+    contentType: file.type,
+    sizeBytes: file.size,
+    metadata: {
+      requestId,
+      source: "photos-admin",
     },
-    body: JSON.stringify({
-      presetId: "roncalphoto-portfolio",
-      externalId: reservedPhotoId,
-      filename: file.name,
-      contentType: file.type,
-      sizeBytes: file.size,
-      metadata: {
-        requestId,
-        source: "photos-admin",
-      },
-    }),
   },
-);
+});
+
+if (!body.success) {
+  throw new Error(body.error.code);
+}
+
+return body.data; // uploadId + signed PUT
 ```
 
 qmenut uses `productId=qmenut` and selects one closed preset from its server-side purpose mapping:
@@ -572,9 +584,9 @@ await fetch(upload.url, {
 });
 ```
 
-The backend polls status through its own protected route. When `status === "succeeded"`, it reads
-the required named variants and transactionally persists its business entity. The browser never
-calls `ming-image-worker` directly.
+The backend polls status through its own protected route with `getUpload`. When
+`status === "succeeded"`, it reads the required named variants and transactionally persists its
+business entity. The browser never calls `ming-image-worker` directly.
 
 ## Local development
 
@@ -592,7 +604,7 @@ resource set. It requires the D1 placeholder to be replaced and all resources ab
 
 ## Logging
 
-There is no request or per-event logging. Unexpected HTTP and Queue handler failures emit only a
+There is no request or per-event logging. Unexpected RPC and Queue handler failures emit only a
 fixed `console.error` message without request data, signed URLs, credentials, image bytes,
 filenames, or operational metadata.
 
@@ -632,8 +644,8 @@ bun run lint:fix
 bun run format
 ```
 
-There is currently no automated test suite. `bun test` is retained as the project test command for
-future coverage and currently exits with "No tests found".
+`bun test` covers the RPC request handlers: envelope mapping, strict input validation, and error
+translation.
 
 ## Verification checklist
 

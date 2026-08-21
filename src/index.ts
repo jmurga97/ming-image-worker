@@ -1,11 +1,21 @@
-import { createApp } from "@/app/create-app";
 import { processQueueBatch } from "@/modules/processing/queue";
+import { ImageRpc } from "@/rpc/image-rpc";
 
 import type { Bindings } from "@/config/types";
 
-const app = createApp();
+export { ImageRpc };
+
+function healthResponse(): Response {
+  return Response.json({
+    success: true as const,
+    data: {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+    },
+  });
+}
 
 export default {
-  fetch: app.fetch,
+  fetch: healthResponse,
   queue: processQueueBatch,
 } satisfies ExportedHandler<Bindings>;

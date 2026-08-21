@@ -13,7 +13,7 @@ const processingLeaseSeconds = 5 * 60;
 
 function getObjectBody(object: R2ObjectBody | null): ReadableStream<Uint8Array> {
   if (!object?.body) {
-    throw new ServiceError("ORIGINAL_NOT_FOUND", 503, "Original image is unavailable", true);
+    throw new ServiceError("ORIGINAL_NOT_FOUND", "Original image is unavailable", true);
   }
 
   const body: unknown = object.body;
@@ -25,7 +25,7 @@ function normalizeProcessingError(error: unknown): ServiceError {
     return error;
   }
 
-  return new ServiceError("IMAGE_PROCESSING_FAILED", 502, "Image processing failed", true);
+  return new ServiceError("IMAGE_PROCESSING_FAILED", "Image processing failed", true);
 }
 
 export class ProcessingService {
@@ -134,7 +134,6 @@ export class ProcessingService {
     if (!product || !variants) {
       throw new ServiceError(
         "INTERNAL_SERVER_ERROR",
-        500,
         "Upload references an unavailable product policy",
       );
     }
@@ -144,11 +143,11 @@ export class ProcessingService {
     const info = await this.engine.readInfo(getObjectBody(original), original?.size ?? 0);
 
     if (!product.acceptedInputFormats.some((format) => format === info.contentType)) {
-      throw new ServiceError("UNSUPPORTED_MEDIA_TYPE", 415, "Uploaded image format is not allowed");
+      throw new ServiceError("UNSUPPORTED_MEDIA_TYPE", "Uploaded image format is not allowed");
     }
 
     if (info.sizeBytes > product.maxUploadBytes) {
-      throw new ServiceError("UPLOAD_TOO_LARGE", 413, "Uploaded image exceeds the size limit");
+      throw new ServiceError("UPLOAD_TOO_LARGE", "Uploaded image exceeds the size limit");
     }
 
     const outputVariants: ImageVariant[] = [];
@@ -173,7 +172,7 @@ export class ProcessingService {
           },
         });
       } catch {
-        throw new ServiceError("STORAGE_FAILED", 503, "Failed to store image variant", true);
+        throw new ServiceError("STORAGE_FAILED", "Failed to store image variant", true);
       }
 
       outputVariants.push({
