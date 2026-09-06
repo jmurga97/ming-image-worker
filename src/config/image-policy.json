@@ -30,24 +30,84 @@
       }
     },
     "qmenut-menu-image": {
-      "version": 1,
+      "version": 2,
       "variants": {
         "main": {
           "format": "image/webp",
           "width": 1024,
           "fit": "scale-down",
           "quality": 82
+        },
+        "w160": {
+          "format": "image/webp",
+          "width": 160,
+          "fit": "scale-down",
+          "quality": 75
+        },
+        "w430": {
+          "format": "image/webp",
+          "width": 430,
+          "fit": "scale-down",
+          "quality": 75
+        },
+        "w860": {
+          "format": "image/webp",
+          "width": 860,
+          "fit": "scale-down",
+          "quality": 75
+        }
+      },
+      "previousVersions": {
+        "1": {
+          "variants": {
+            "main": {
+              "format": "image/webp",
+              "width": 1024,
+              "fit": "scale-down",
+              "quality": 82
+            }
+          }
         }
       }
     },
     "qmenut-branch-photo": {
-      "version": 1,
+      "version": 2,
       "variants": {
         "main": {
           "format": "image/webp",
           "width": 1600,
           "fit": "scale-down",
           "quality": 84
+        },
+        "w160": {
+          "format": "image/webp",
+          "width": 160,
+          "fit": "scale-down",
+          "quality": 75
+        },
+        "w430": {
+          "format": "image/webp",
+          "width": 430,
+          "fit": "scale-down",
+          "quality": 75
+        },
+        "w860": {
+          "format": "image/webp",
+          "width": 860,
+          "fit": "scale-down",
+          "quality": 75
+        }
+      },
+      "previousVersions": {
+        "1": {
+          "variants": {
+            "main": {
+              "format": "image/webp",
+              "width": 1600,
+              "fit": "scale-down",
+              "quality": 84
+            }
+          }
         }
       }
     }

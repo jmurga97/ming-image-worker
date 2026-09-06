@@ -83,6 +83,22 @@ export interface UploadJobsStore {
   updateRetention(uploadId: string, status: OriginalRetentionStatus): Promise<void>;
 }
 
+export interface VariantBackfillPage {
+  hasMore: boolean;
+  jobs: ImageUploadJob[];
+}
+
+export interface ImageVariantBackfillStore {
+  listSucceededForVariantBackfill(
+    productId: string,
+    presetId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<VariantBackfillPage>;
+  listVariants(uploadId: string): Promise<ImageVariant[]>;
+  insertVariantsIfMissing(uploadId: string, variants: ImageVariant[]): Promise<void>;
+}
+
 function parseMetadata(value: string | null): CreateUploadRecord["operationalMetadata"] {
   if (!value) {
     return undefined;
@@ -144,7 +160,7 @@ function toVariant(row: VariantRow): ImageVariant {
   };
 }
 
-export class UploadJobsRepository implements UploadJobsStore {
+export class UploadJobsRepository implements UploadJobsStore, ImageVariantBackfillStore {
   constructor(private readonly db: D1Database) {}
 
   async create(record: CreateUploadRecord): Promise<ImageUploadJob> {
@@ -239,6 +255,73 @@ export class UploadJobsRepository implements UploadJobsStore {
       .all<VariantRow>();
 
     return result.results.map(toVariant);
+  }
+
+  async listSucceededForVariantBackfill(
+    productId: string,
+    presetId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<VariantBackfillPage> {
+    const decodedCursor = cursor ? decodeVariantBackfillCursor(cursor) : null;
+    const cursorClause = decodedCursor
+      ? " AND (created_at > ? OR (created_at = ? AND id > ?))"
+      : "";
+    const bindings = decodedCursor
+      ? [
+          productId,
+          presetId,
+          decodedCursor.createdAt,
+          decodedCursor.createdAt,
+          decodedCursor.id,
+          limit + 1,
+        ]
+      : [productId, presetId, limit + 1];
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM image_upload_jobs
+         WHERE product_id = ? AND preset_id = ? AND status = 'succeeded'${cursorClause}
+         ORDER BY created_at ASC, id ASC LIMIT ?`,
+      )
+      .bind(...bindings)
+      .all<UploadJobRow>();
+    const hasMore = result.results.length > limit;
+
+    return {
+      hasMore,
+      jobs: result.results.slice(0, limit).map(toJob),
+    };
+  }
+
+  async insertVariantsIfMissing(uploadId: string, variants: ImageVariant[]): Promise<void> {
+    if (variants.length === 0) {
+      return;
+    }
+
+    await this.db.batch(
+      variants.map((variant) =>
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO image_variants (
+              id, upload_id, name, bucket, key, public_url, content_type,
+              width, height, size_bytes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            uploadId,
+            variant.name,
+            variant.bucket,
+            variant.key,
+            variant.publicUrl,
+            variant.contentType,
+            variant.width,
+            variant.height,
+            variant.sizeBytes,
+            new Date().toISOString(),
+          ),
+      ),
+    );
   }
 
   async markQueued(uploadId: string): Promise<void> {
@@ -411,4 +494,14 @@ export class UploadJobsRepository implements UploadJobsStore {
       .bind(status, new Date().toISOString(), uploadId)
       .run();
   }
+}
+
+function decodeVariantBackfillCursor(cursor: string): { createdAt: string; id: string } {
+  const [createdAt, id, ...rest] = decodeURIComponent(cursor).split("|");
+
+  if (!createdAt || !id || rest.length > 0) {
+    throw new Error("Invalid variant backfill cursor");
+  }
+
+  return { createdAt, id };
 }

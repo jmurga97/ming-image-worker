@@ -1,10 +1,15 @@
 import {
+  rpcBackfillVariantsSchema,
   rpcCreateUploadSchema,
   rpcGetUploadSchema,
   rpcRetryUploadSchema,
 } from "@/modules/uploads/schemas";
 import { errorEnvelope, errorEnvelopeFromError, successEnvelope } from "@/shared/lib/envelopes";
 
+import type {
+  VariantBackfillResult,
+  VariantBackfillService,
+} from "@/modules/processing/services/variant-backfill.service";
 import type { CreateUploadInput, SignedUpload, UploadResult } from "@/modules/uploads/types";
 import type { RpcErrorEnvelope, RpcEnvelope } from "@/shared/lib/envelopes";
 import type { ZodError, ZodType } from "zod";
@@ -101,6 +106,24 @@ export async function handleRetryUpload(
 
   try {
     const result = await service.retryUpload(parsed.data.productId, parsed.data.uploadId);
+    return successEnvelope(result);
+  } catch (error) {
+    return errorEnvelopeFromError(error);
+  }
+}
+
+export async function handleBackfillVariants(
+  service: VariantBackfillService,
+  input: unknown,
+): Promise<RpcEnvelope<VariantBackfillResult>> {
+  const parsed = validateInput(rpcBackfillVariantsSchema, input);
+
+  if (!parsed.ok) {
+    return parsed.envelope;
+  }
+
+  try {
+    const result = await service.run(parsed.data);
     return successEnvelope(result);
   } catch (error) {
     return errorEnvelopeFromError(error);
