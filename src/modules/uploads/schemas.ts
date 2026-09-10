@@ -49,7 +49,7 @@ export const rpcBackfillVariantsSchema = z
   .object({
     cursor: z.string().trim().max(200).nullable().default(null),
     limit: z.number().int().min(1).max(20).default(20),
-    presetId: z.enum(["qmenut-menu-image", "qmenut-branch-photo"]),
+    presetId: z.enum(["qmenut-menu-image", "qmenut-branch-photo", "qmenut-logo"]),
     productId: z.literal("qmenut"),
   })
   .strict();

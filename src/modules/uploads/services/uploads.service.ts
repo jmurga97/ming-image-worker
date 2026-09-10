@@ -183,9 +183,10 @@ export class UploadsService {
       throw new ServiceError("UPLOAD_NOT_FOUND", "Upload job not found");
     }
 
-    if (job.status !== "failed") {
-      throw new ServiceError("UPLOAD_NOT_RETRYABLE", "Only failed uploads can be retried");
+    if (job.status === "awaiting_upload") {
+      throw new ServiceError("UPLOAD_NOT_RETRYABLE", "The file has not been uploaded yet");
     }
+    if (job.status !== "failed") return this.getUpload(productId, uploadId);
 
     const storage = resolveStorageProfile(this.storageRegistry, job.storageProfileId);
     const original = await storage.originals.binding.head(job.originalKey);
@@ -198,6 +199,8 @@ export class UploadsService {
       kind: "retry",
       uploadId: job.id,
     });
+    // Publish acceptance after enqueueing. Fence against a newer processing result.
+    await this.repository.markQueued(job.id, job.attempts);
 
     return this.getUpload(productId, uploadId);
   }

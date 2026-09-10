@@ -26,6 +26,13 @@
           "width": 512,
           "fit": "scale-down",
           "quality": 90
+        },
+        "favicon": {
+          "format": "image/x-icon",
+          "width": 48,
+          "height": 48,
+          "fit": "contain",
+          "quality": 90
         }
       }
     },

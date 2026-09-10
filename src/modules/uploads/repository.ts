@@ -59,7 +59,7 @@ export interface UploadJobsStore {
   findByIdempotencyKey(productId: string, key: string): Promise<ImageUploadJob | null>;
   findByOriginalObject(bucket: string, key: string): Promise<ImageUploadJob | null>;
   listVariants(uploadId: string): Promise<ImageVariant[]>;
-  markQueued(uploadId: string): Promise<void>;
+  markQueued(uploadId: string, expectedAttempts?: number): Promise<void>;
   claim(uploadId: string, leaseSeconds: number): Promise<ImageUploadJob | null>;
   markTransientFailure(
     uploadId: string,
@@ -324,16 +324,17 @@ export class UploadJobsRepository implements UploadJobsStore, ImageVariantBackfi
     );
   }
 
-  async markQueued(uploadId: string): Promise<void> {
+  async markQueued(uploadId: string, expectedAttempts?: number): Promise<void> {
     const now = new Date().toISOString();
     await this.db
       .prepare(
         `UPDATE image_upload_jobs
          SET status = 'queued', queued_at = COALESCE(queued_at, ?), updated_at = ?,
              error_code = NULL, error_message = NULL, error_retryable = NULL
-         WHERE id = ? AND status IN ('awaiting_upload', 'failed')`,
+         WHERE id = ? AND status IN ('awaiting_upload', 'failed')
+           AND (? IS NULL OR attempts = ?)`,
       )
-      .bind(now, now, uploadId)
+      .bind(now, now, uploadId, expectedAttempts ?? null, expectedAttempts ?? null)
       .run();
   }
 

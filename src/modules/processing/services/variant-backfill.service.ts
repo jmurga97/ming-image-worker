@@ -13,7 +13,7 @@ const MAX_BATCH_SIZE = 20;
 export interface VariantBackfillInput {
   cursor: string | null;
   limit: number;
-  presetId: "qmenut-menu-image" | "qmenut-branch-photo";
+  presetId: "qmenut-menu-image" | "qmenut-branch-photo" | "qmenut-logo";
   productId: "qmenut";
 }
 

@@ -14,8 +14,9 @@ const imageFitSchema = z.enum(["scale-down", "contain", "cover", "crop", "pad", 
 
 const variantSchema = z
   .object({
-    format: z.literal("image/webp"),
+    format: z.enum(["image/webp", "image/x-icon"]),
     width: z.number().int().positive().max(12_000),
+    height: z.number().int().positive().max(12_000).optional(),
     fit: imageFitSchema,
     quality: z.number().int().min(1).max(100),
   })

@@ -25,6 +25,8 @@ export function extensionForMimeType(contentType: string): string {
       return "jpg";
     case "image/png":
       return "png";
+    case "image/x-icon":
+      return "ico";
     default:
       return "bin";
   }

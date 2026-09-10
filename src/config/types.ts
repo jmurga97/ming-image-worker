@@ -12,7 +12,7 @@ export interface ImageTransformOptions {
 }
 
 export interface ImageOutputOptions {
-  format: "image/webp";
+  format: "image/webp" | "image/png";
   quality?: number;
   anim?: boolean;
 }
